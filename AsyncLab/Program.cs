@@ -103,7 +103,8 @@ foreach (var uf in ufsOrdenadas)
 
         var listaJson = new List<object>();
         int count = 0;
-        foreach (var m in listaUf)
+
+        Parallel.ForEach(listaUf, m =>
         {
             // Password: todos os campos concatenados; Salt: IBGE + “pepper” fixo (opcional)
             string password = m.ToConcatenatedString();
@@ -112,9 +113,11 @@ foreach (var uf in ufsOrdenadas)
             // Trabalho pesado real (PBKDF2/SHA-256)
             string hashHex = Util.DeriveHashHex(password, salt, PBKDF2_ITERATIONS, HASH_BYTES);
 
+            //Caso ocorra Overflow Exception rodar o programa de novo => Acontece por estarmos calculando o hash aquele tanto de vezes
             swOut.WriteLine($"{m.Tom};{m.Ibge};{m.NomeTom};{m.NomeIbge};{m.Uf};{hashHex}");
 
-            listaJson.Add(new {
+            listaJson.Add(new
+            {
                 m.Tom,
                 m.Ibge,
                 m.NomeTom,
@@ -128,11 +131,12 @@ foreach (var uf in ufsOrdenadas)
             {
                 Console.WriteLine($"  Parcial: {count}/{listaUf.Count} municípios processados para UF {uf} | Tempo parcial: {FormatTempo(swUf.ElapsedMilliseconds)}");
             }
-        }
+        });
+
         // Salva JSON
         string jsonPath = Path.Combine(outRoot, $"municipios_hash_{uf}.json");
-        var json = JsonSerializer.Serialize(listaJson, new JsonSerializerOptions { WriteIndented = true });
-        File.WriteAllText(jsonPath, json, Encoding.UTF8);
+        var json = await Task.Run(()=> JsonSerializer.Serialize(listaJson, new JsonSerializerOptions { WriteIndented = true }));
+        await File.WriteAllTextAsync(jsonPath, json, Encoding.UTF8);
         swUf.Stop();
         Console.WriteLine($"UF {uf} concluída. Arquivos gerados: CSV e JSON. Tempo total UF: {FormatTempo(swUf.ElapsedMilliseconds)}");
     }
