@@ -1,5 +1,10 @@
 # ⚡ AsyncLab
 
+
+## Integrantes
+* Gabriel Dalaqua - RM551986
+* Paloma Mirela - RM551321
+
 ## 🧪 Laboratório Async
 
 ### 🎯 Objetivo
