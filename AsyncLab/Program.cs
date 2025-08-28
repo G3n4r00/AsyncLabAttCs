@@ -1,8 +1,9 @@
 ﻿using System.Diagnostics;
+using System.IO;
+using System.Linq;
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using System.Linq;
 
 // =================== Configuração ===================
 // Iterações elevadas deixam o trabalho realmente pesado (CPU-bound).
@@ -24,11 +25,21 @@ string tempCsvPath = Path.Combine(baseDir, "municipios.csv");
 string outRoot = Path.Combine(baseDir, OUT_DIR_NAME);
 
 Console.WriteLine("Baixando CSV de municípios (Receita Federal) ...");
-using (var wc = new WebClient())
+
+if (File.Exists(tempCsvPath))
 {
-    wc.Encoding = Encoding.UTF8; // ajuste para ISO-8859-1 se necessário
-    wc.DownloadFile(CSV_URL, tempCsvPath);
+    Console.WriteLine("municipio.csv ja existe");
 }
+else
+{
+    using (var wc = new WebClient())
+    {
+        wc.Encoding = Encoding.UTF8; // ajuste para ISO-8859-1 se necessário
+        wc.DownloadFile(CSV_URL, tempCsvPath);
+    }
+}
+
+   
 
 Console.WriteLine("Lendo e parseando o CSV ...");
 var linhas = File.ReadAllLines(tempCsvPath, Encoding.UTF8);
