@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System.ComponentModel.DataAnnotations;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -22,60 +23,31 @@ var sw = Stopwatch.StartNew();
 
 string baseDir = Directory.GetCurrentDirectory();
 string tempCsvPath = Path.Combine(baseDir, "municipios.csv");
+string tempOldCsvPath = Path.Combine(baseDir, "municipios_old.csv");
+string tempChangesCsvPath = Path.Combine(baseDir, "municipios_alt.csv");
 string outRoot = Path.Combine(baseDir, OUT_DIR_NAME);
 
 Console.WriteLine("Baixando CSV de municípios (Receita Federal) ...");
 
+List<Municipio> municipios = new List<Municipio>();
+
+
 if (File.Exists(tempCsvPath))
 {
-    Console.WriteLine("municipio.csv ja existe");
+    Console.WriteLine("municipio.csv ja existe, baixando da receita para comparar...");
+    File.Move(tempCsvPath, tempOldCsvPath, true);
+
+    Util.BaixarArquivo(CSV_URL, tempCsvPath);
+
+    var municiosOld = Util.CarregarMunicipios(tempOldCsvPath);
+    municipios = Util.CarregarMunicipios(tempCsvPath);
 }
 else
 {
-    using (var wc = new WebClient())
-    {
-        wc.Encoding = Encoding.UTF8; // ajuste para ISO-8859-1 se necessário
-        wc.DownloadFile(CSV_URL, tempCsvPath);
-    }
+    Util.BaixarArquivo(CSV_URL, tempCsvPath);
+    municipios = Util.CarregarMunicipios(tempCsvPath);
 }
-
    
-
-Console.WriteLine("Lendo e parseando o CSV ...");
-var linhas = File.ReadAllLines(tempCsvPath, Encoding.UTF8);
-if (linhas.Length == 0)
-{
-    Console.WriteLine("Arquivo CSV vazio.");
-    return;
-}
-
-int startIndex = 0;
-if (linhas[0].IndexOf("IBGE", StringComparison.OrdinalIgnoreCase) >= 0 ||
-    linhas[0].IndexOf("UF", StringComparison.OrdinalIgnoreCase) >= 0)
-{
-    startIndex = 1; // pula cabeçalho
-}
-
-var municipios = new List<Municipio>(linhas.Length - startIndex);
-
-for (int i = startIndex; i < linhas.Length; i++)
-{
-    var linha = (linhas[i] ?? "").Trim();
-    if (string.IsNullOrWhiteSpace(linha)) continue;
-
-    var parts = linha.Split(';');
-    if (parts.Length < 5) continue;
-
-    municipios.Add(new Municipio
-    {
-        Tom = Util.San(parts[0]),
-        Ibge = Util.San(parts[1]),
-        NomeTom = Util.San(parts[2]),
-        NomeIbge = Util.San(parts[3]),
-        Uf = Util.San(parts[4]).ToUpperInvariant()
-    });
-}
-
 Console.WriteLine($"Registros lidos: {municipios.Count}");
 
 // Grupo por UF
@@ -88,7 +60,7 @@ foreach (var m in municipios)
 }
 
 // Ordena as UFs alfabeticamente e ignora a UF "EX"
-var ufsOrdenadas = porUf.Keys
+var ufsOrdenadas = porUf.Keys //Somente as chaves (UFs)
     .Where(uf => !string.Equals(uf, "EX", StringComparison.OrdinalIgnoreCase))
     .OrderBy(uf => uf, StringComparer.OrdinalIgnoreCase)
     .ToList();
@@ -103,6 +75,7 @@ foreach (var uf in ufsOrdenadas)
 
     // Ordena por Nome preferido para saída consistente
     listaUf.Sort((a, b) => string.Compare(a.NomePreferido, b.NomePreferido, StringComparison.OrdinalIgnoreCase));
+
 
     Console.WriteLine($"Processando UF: {uf} ({listaUf.Count} municípios)");
     var swUf = Stopwatch.StartNew();
@@ -144,6 +117,7 @@ foreach (var uf in ufsOrdenadas)
             }
         });
 
+        //Salvar os arquivos por UF em formato binário
         // Salva JSON
         string jsonPath = Path.Combine(outRoot, $"municipios_hash_{uf}.json");
         var json = await Task.Run(()=> JsonSerializer.Serialize(listaJson, new JsonSerializerOptions { WriteIndented = true }));
@@ -152,6 +126,9 @@ foreach (var uf in ufsOrdenadas)
         Console.WriteLine($"UF {uf} concluída. Arquivos gerados: CSV e JSON. Tempo total UF: {FormatTempo(swUf.ElapsedMilliseconds)}");
     }
 }
+
+
+//Criar pesquisa de município por UF, Parte do nome ou código;
 
 sw.Stop();
 Console.WriteLine();

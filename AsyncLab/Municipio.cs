@@ -1,4 +1,4 @@
-class Municipio
+public class Municipio
 {
     // CSV padrão: TOM;IBGE;Nome(TOM);Nome(IBGE);UF
     public string Tom { get; set; } = "";
