@@ -6,6 +6,7 @@ public class Municipio
     public string NomeTom { get; set; } = "";
     public string NomeIbge { get; set; } = "";
     public string Uf { get; set; } = "";
+    public string Hash { get; set; } = "";
 
     public string NomePreferido => !string.IsNullOrWhiteSpace(NomeIbge) ? NomeIbge : NomeTom;
 

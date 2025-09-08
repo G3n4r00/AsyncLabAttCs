@@ -1,3 +1,4 @@
+using AsyncLab;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -60,9 +61,101 @@ public static class Util
         return municipios;
     }
 
+    private static bool MunicipiosIguais(Municipio m1, Municipio m2)
+    {
+        return m1.Tom == m2.Tom &&
+               m1.Ibge == m2.Ibge &&
+               m1.NomeTom == m2.NomeTom &&
+               m1.NomeIbge == m2.NomeIbge &&
+               m1.Uf == m2.Uf;
+    }
+
+    public static void SalvarDiferencas(List<DiferencaMunicipio> diferencas)
+    {
+        if (diferencas.Count == 0)
+        {
+            Console.WriteLine("Nenhuma diferença encontrada!");
+            return;
+        }
+
+        string caminhoArquivo = Path.Combine(Directory.GetCurrentDirectory(), "municipios_alt.csv");
+
+        using (var sw = new StreamWriter(caminhoArquivo, false, Encoding.UTF8))
+        {
+            sw.WriteLine("TipoMudanca;IBGE;TOM;NomeTOM;NomeIBGE;UF;IBGE_Antigo;NomeTOM_Antigo;NomeIBGE_Antigo");
+
+            foreach (var diff in diferencas)
+            {
+                var m = diff.Municipio;
+                var mAntigo = diff.MunicipioAntigo;
+
+                if (diff.TipoMudanca == "ALTERADO")
+                {
+                    sw.WriteLine($"{diff.TipoMudanca};{m.Ibge};{m.Tom};{m.NomeTom};{m.NomeIbge};{m.Uf};{mAntigo.Ibge};{mAntigo.NomeTom};{mAntigo.NomeIbge}");
+                }
+                else
+                {
+                    sw.WriteLine($"{diff.TipoMudanca};{m.Ibge};{m.Tom};{m.NomeTom};{m.NomeIbge};{m.Uf};;;");
+                }
+            }
+        }
+
+        Console.WriteLine($"{diferencas.Count} diferenças salvas em: {caminhoArquivo}");
+    }
+
+
     public static void CompararEGerarDiferencas(List<Municipio> municipiosOld, List<Municipio> municipiosNovo)
     {
-        return;
+        var dictOld = municipiosOld.ToDictionary(m => m.Ibge, m => m);
+        var dictNovo = municipiosNovo.ToDictionary(m => m.Ibge, m => m);
+
+        
+        var diferencas = new List<DiferencaMunicipio>();
+        var processados = new HashSet<string>(); // Para evitar processar o mesmo IBGE duas vezes, melhora perf
+
+        foreach (var kvp in dictNovo)
+        {
+            processados.Add(kvp.Key);
+
+            if (dictOld.TryGetValue(kvp.Key, out var municipioOld))
+            {
+                // Existe nos dois
+                if (!MunicipiosIguais(municipioOld, kvp.Value))
+                {
+                    diferencas.Add(new DiferencaMunicipio
+                    {
+                        MunicipioAntigo = municipioOld,
+                        Municipio = kvp.Value,
+                        TipoMudanca = "ALTERADO"
+                    });
+                }
+                // Se são iguais, não faz nada
+            }
+            else
+            {
+                // Só existe no novo
+                diferencas.Add(new DiferencaMunicipio
+                {
+                    Municipio = kvp.Value,
+                    TipoMudanca = "ADICIONADO"
+                });
+            }
+        }
+
+        
+        foreach (var kvp in dictOld)
+        {
+            if (!processados.Contains(kvp.Key))
+            {
+                // Só existe no antigo
+                diferencas.Add(new DiferencaMunicipio
+                {
+                    Municipio = kvp.Value,
+                    TipoMudanca = "REMOVIDO"
+                });
+            }
+        }
+        SalvarDiferencas(diferencas);
     }
 
     public static void BaixarArquivo(string url, string path)
@@ -70,7 +163,44 @@ public static class Util
         using var client = new HttpClient();
         var data = client.GetByteArrayAsync(url).Result;
         File.WriteAllBytes(path, data);
-    }   
+    }
+
+    public static List<Municipio> LerArquivoBinarioComMetadados(string path)
+    {
+        var municipios = new List<Municipio>();
+
+        using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read))
+        using (var br = new BinaryReader(fs, Encoding.UTF8))
+        {
+            // Lê cabeçalho
+            string assinatura = br.ReadString();
+            if (assinatura != "MUNHASH")
+                throw new InvalidDataException("Arquivo não é um arquivo de municípios válido");
+
+            int versao = br.ReadInt32();
+            string uf = br.ReadString();
+            DateTime dataGeracao = DateTime.FromBinary(br.ReadInt64());
+            int count = br.ReadInt32();
+
+            Console.WriteLine($"Arquivo: UF {uf}, {count} municípios, gerado em {dataGeracao:dd/MM/yyyy HH:mm:ss}");
+
+            for (int i = 0; i < count; i++)
+            {
+                var municipio = new Municipio
+                {
+                    Tom = br.ReadString(),
+                    Ibge = br.ReadString(),
+                    NomeTom = br.ReadString(),
+                    NomeIbge = br.ReadString(),
+                    Uf = br.ReadString(),
+                    Hash = br.ReadString()
+                };
+                municipios.Add(municipio);
+            }
+        }
+
+        return municipios;
+    }
 
     public static string ToHex(byte[] data)
     {
